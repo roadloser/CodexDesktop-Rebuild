@@ -4,10 +4,11 @@
  * Automatically detects system architecture and sets correct CLI path
  */
 
-const { spawn } = require('child_process');
+const { launchDev } = require('./launch-dev');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
+const { resolveDevResources } = require('./dev-resource-paths');
 
 // Detect platform and architecture
 const platform = process.platform;
@@ -40,10 +41,11 @@ const cliName = platform === 'win32' ? 'codex.exe' : 'codex';
 const srcPlatform = platform === 'darwin'
   ? (arch === 'arm64' ? 'mac-arm64' : 'mac-x64')
   : platform === 'win32' ? 'win' : `${platform}-${arch}`;
+const upstream = resolveDevResources(path.join(__dirname, '..', 'src', srcPlatform), platform);
 
 const candidates = [
   // 1. Upstream CLI (from sync-upstream, matches app version)
-  path.join(__dirname, '..', 'src', srcPlatform, cliName),
+  upstream.cli,
   // 2. @cometix/codex platform package (0.128+ uses separate packages)
   (() => {
     const pkgMap = {
@@ -76,9 +78,8 @@ const candidates = [
 const cliPath = candidates.find(p => fs.existsSync(p));
 
 // Verify CLI exists
-if (!fs.existsSync(cliPath)) {
-  console.error(`CLI not found at: ${cliPath}`);
-  console.error('Tried: resources/bin/ and node_modules/@cometix/codex/vendor/');
+if (!cliPath) {
+  console.error('CLI not found. Tried:\n' + candidates.join('\n'));
   process.exit(1);
 }
 
@@ -91,8 +92,7 @@ console.log(`[start-dev] CLI Path: ${cliPath}`);
 console.log(`[start-dev] App Root: ${appEntry}`);
 
 // Launch Electron with CLI path
-const electronBin = require('electron');
-const child = spawn(electronBin, [appEntry], {
+launchDev(appEntry, {
   cwd: path.join(__dirname, '..'),
   stdio: 'inherit',
   env: {
@@ -102,11 +102,8 @@ const child = spawn(electronBin, [appEntry], {
     ELECTRON_RENDERER_URL: process.env.ELECTRON_RENDERER_URL || 'app://-/index.html',
     CODEX_ELECTRON_RESOURCES_PATH: path.join(__dirname, '..', 'src', srcPlatform),
     CODEX_ELECTRON_BUNDLED_PLUGINS_RESOURCES_PATH: path.join(__dirname, '..', 'src', srcPlatform),
-    CODEX_NODE_REPL_PATH: path.join(__dirname, '..', 'src', srcPlatform, 'node_repl'),
-    CODEX_BROWSER_USE_NODE_PATH: path.join(__dirname, '..', 'src', srcPlatform, 'node'),
+    CODEX_NODE_REPL_PATH: upstream.nodeRepl,
+    CODEX_BROWSER_USE_NODE_PATH: upstream.node,
   },
 });
 
-child.on('close', (code) => {
-  process.exit(code);
-});

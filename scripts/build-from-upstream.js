@@ -13,6 +13,7 @@
 const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
+const { findMacApp } = require("./find-mac-app");
 
 const PROJECT_ROOT = path.resolve(__dirname, "..");
 const SRC_DIR = path.join(PROJECT_ROOT, "src");
@@ -116,21 +117,14 @@ function buildMac(platform) {
   const variant = platform === "mac-arm64" ? "arm64" : "x64";
   const extractDir = path.join(tempDir, `${variant}-extract`);
 
-  // Find Codex.app
+  // Match the bundle ID: upstream may name the bundle Codex.app or ChatGPT.app.
   let appPath = null;
   if (fs.existsSync(extractDir)) {
-    const findApp = (dir) => {
-      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-        if (e.name === "Codex.app" && e.isDirectory()) return path.join(dir, e.name);
-        if (e.isDirectory()) { const r = findApp(path.join(dir, e.name)); if (r) return r; }
-      }
-      return null;
-    };
-    appPath = findApp(extractDir);
+    appPath = findMacApp(extractDir);
   }
 
   if (!appPath) {
-    console.error(`[x] Codex.app not found in cache. Run sync-upstream first.`);
+    console.error(`[x] Codex application (com.openai.codex) not found in cache. Run sync-upstream first.`);
     process.exit(1);
   }
 
